@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>Lighting & Shading</title>
+  <style>
+    body { background: #111; color: #ccc; font-family: monospace; }
+    canvas { border: 1px solid #444; }
+    .layout { display: flex; gap: 10px; align-items: flex-start; }
+    .editors { display: flex; flex-direction: column; gap: 10px; }
+    textarea {
+      background: #222;
+      color: #0f0;
+      font: 14px monospace;
+      width: 400px;
+      height: 200px;
+      box-sizing: border-box;
+    }
+    #shaderError { color: #f66; white-space: pre-wrap; width: 400px; margin: 0; }
+    .controls { margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
+    .control-row { display: flex; align-items: center; gap: 10px; }
+  </style>
+</head>
+
+<body>
+  <h2>Hierarchical Model with Two Lights: Desk Lamp</h2>
+  <p>Edit the shaders on the left; the canvas updates as you type.<br>
+    Drag with the mouse to rotate the model.<br>
+    Use the arrow keys and w, s keys to move the camera.<br>
+    Use the slider and dropdown to rotate about an axis; the button starts/stops spinning.<br>
+    The lamp's spotlight is carried by the arm, so moving any joint aims the light.</p>
+  <!-- #1: the primitives and levels, spelled out -->
+  <p>Primitives: cube (desk, upper arm), cylinder (lamp base, lower arm), cone (shade), sphere (bulb, two balls), torus (shade rim).<br>
+    Levels: desk (root) &rarr; lamp base &rarr; lower arm &rarr; upper arm &rarr; shade &rarr; bulb and rim. The two balls sit on the desk.<br>
+    Lights: room light (fixed in the world) and the lamp's spotlight.</p>
+  <p><a href="https://github.com/jrdnmrtnz12/cs512_lighting_shading" style="color:#6cf">View source on GitHub</a></p>
+
+  <div class="layout">
+    <div class="editors">
+      <div>
+        <b>Vertex Shader</b><br>
+        <textarea id="vertEditor" spellcheck="false"></textarea>
+      </div>
+      <div>
+        <b>Fragment Shader</b><br>
+        <textarea id="fragEditor" spellcheck="false"></textarea>
+      </div>
+      <pre id="shaderError"></pre>
+    </div>
+
+    <div>
+      <canvas id="glcanvas" width="640" height="480"></canvas>
+
+      <div class="controls">
+        <div class="control-row">
+          <label for="slider">Rotation Angle:</label>
+          <input type="range" id="slider" min="0" max="360" value="0">
+          <span id="sliderValue">0</span>
+        </div>
+        <div class="control-row">
+          <select id="axisSelect">
+            <option value="x">X Rotation</option>
+            <option value="y">Y Rotation</option>
+            <option value="z">Z Rotation</option>
+          </select>
+          <button id="spinButton">Start/Stop Rotation</button>
+        </div>
+
+        <!-- #4: lamp movement -->
+        <b>Lamp movement</b>
+        <div class="control-row">
+          <label for="swivelSlider">Base swivel:</label>
+          <input type="range" id="swivelSlider" min="-180" max="180" value="0">
+          <span id="swivelOut">0°</span>
+        </div>
+        <div class="control-row">
+          <label for="lowerSlider">Lower arm:</label>
+          <input type="range" id="lowerSlider" min="-60" max="60" value="20">
+          <span id="lowerOut">20°</span>
+        </div>
+        <div class="control-row">
+          <label for="upperSlider">Upper arm:</label>
+          <input type="range" id="upperSlider" min="-120" max="60" value="-15">
+          <span id="upperOut">-15°</span>
+        </div>
+        <div class="control-row">
+          <label for="shadeSlider">Shade tilt:</label>
+          <input type="range" id="shadeSlider" min="-30" max="180" value="40">
+          <span id="shadeOut">40°</span>
+        </div>
+        <div class="control-row">
+          <label><input type="checkbox" id="swayCheck" checked> Sway</label>
+          <button id="resetBtn">Reset</button>
+        </div>
+
+        <!-- #4: lights -->
+        <b>Lights</b>
+        <div class="control-row">
+          <label><input type="checkbox" id="spotCheck" checked> Spotlight on</label>
+          <label for="spotColor">Color:</label>
+          <input type="color" id="spotColor" value="#fff2cc">
+        </div>
+        <div class="control-row">
+          <label for="spotBrightSlider">Spotlight brightness:</label>
+          <input type="range" id="spotBrightSlider" min="0" max="200" value="150">
+          <span id="spotBrightOut">150%</span>
+        </div>
+        <div class="control-row">
+          <label for="spotWidthSlider">Spotlight width:</label>
+          <input type="range" id="spotWidthSlider" min="10" max="60" value="30">
+          <span id="spotWidthOut">30°</span>
+        </div>
+        <div class="control-row">
+          <label for="roomBrightSlider">Room light brightness:</label>
+          <input type="range" id="roomBrightSlider" min="0" max="100" value="50">
+          <span id="roomBrightOut">50%</span>
+        </div>
+
+        <!-- #4: materials and shading -->
+        <b>Materials &amp; shading</b>
+        <div class="control-row">
+          <label for="armsMaterial">Lamp arms:</label>
+          <select id="armsMaterial">
+            <option value="matte">Matte</option><option value="plastic">Plastic</option>
+            <option value="metal">Metal</option><option value="gold">Gold</option>
+          </select>
+          <label for="shadeMaterial">Shade:</label>
+          <select id="shadeMaterial">
+            <option value="matte">Matte</option><option value="plastic">Plastic</option>
+            <option value="metal">Metal</option><option value="gold">Gold</option>
+          </select>
+        </div>
+        <div class="control-row">
+          <label for="smoothBallMaterial">Smooth ball:</label>
+          <select id="smoothBallMaterial">
+            <option value="matte">Matte</option><option value="plastic">Plastic</option>
+            <option value="metal">Metal</option><option value="gold">Gold</option>
+          </select>
+          <label for="flatBallMaterial">Flat ball:</label>
+          <select id="flatBallMaterial">
+            <option value="matte">Matte</option><option value="plastic">Plastic</option>
+            <option value="metal">Metal</option><option value="gold">Gold</option>
+          </select>
+        </div>
+        <div class="control-row">
+          <label for="lampShading">Lamp shading:</label>
+          <select id="lampShading">
+            <option value="smooth">Smooth</option><option value="flat">Flat</option>
+          </select>
+          <label for="specModel">Highlight:</label>
+          <select id="specModel">
+            <option value="phong">Phong</option><option value="blinn">Blinn-Phong</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="transforms.js"></script>
+  <script src="models.js"></script>
+  <script src="main.js"></script>
+</body>
+
+</html>
