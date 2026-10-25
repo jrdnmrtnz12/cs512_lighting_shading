@@ -34,6 +34,17 @@
   <p>Primitives: cube (desk, upper arm), cylinder (lamp base, lower arm), cone (shade), sphere (bulb, two balls), torus (shade rim).<br>
     Levels: desk (root) &rarr; lamp base &rarr; lower arm &rarr; upper arm &rarr; shade &rarr; bulb and rim. The two balls sit on the desk.<br>
     Lights: room light (fixed in the world) and the lamp's spotlight.</p>
+  <!-- #5: the extras beyond what's asked -->
+  <p>Outstanding Effects Attempt:</p>
+  <ul>
+    <li>The spotlight moves with the lamp.</li>
+    <li>The bulb glows when the spotlight is on.</li>
+    <li>The spotlight fades with distance.</li>
+    <li>Spotlight color, brightness and width controls.</li>
+    <li>5 primitives and 6 levels.</li>
+    <li>Stretched shapes still light correctly.</li>
+    <li>Reset button.</li>
+  </ul>
   <p><a href="https://github.com/jrdnmrtnz12/cs512_lighting_shading" style="color:#6cf">View source on GitHub</a></p>
 
   <div class="layout">
@@ -86,8 +97,8 @@
         </div>
         <div class="control-row">
           <label for="shadeSlider">Shade tilt:</label>
-          <input type="range" id="shadeSlider" min="-30" max="180" value="40">
-          <span id="shadeOut">40°</span>
+          <input type="range" id="shadeSlider" min="-30" max="180" value="73">
+          <span id="shadeOut">73°</span>
         </div>
         <div class="control-row">
           <label><input type="checkbox" id="swayCheck" checked> Sway</label>
@@ -117,40 +128,30 @@
           <span id="roomBrightOut">50%</span>
         </div>
 
-        <!-- #4: materials and shading -->
-        <b>Materials &amp; shading</b>
+        <!-- #4: materials -->
+        <b>Materials</b>
         <div class="control-row">
           <label for="armsMaterial">Lamp arms:</label>
           <select id="armsMaterial">
             <option value="matte">Matte</option><option value="plastic">Plastic</option>
-            <option value="metal">Metal</option><option value="gold">Gold</option>
+            <option value="metal">Metal</option>
           </select>
           <label for="shadeMaterial">Shade:</label>
           <select id="shadeMaterial">
             <option value="matte">Matte</option><option value="plastic">Plastic</option>
-            <option value="metal">Metal</option><option value="gold">Gold</option>
+            <option value="metal">Metal</option>
           </select>
         </div>
         <div class="control-row">
           <label for="smoothBallMaterial">Smooth ball:</label>
           <select id="smoothBallMaterial">
             <option value="matte">Matte</option><option value="plastic">Plastic</option>
-            <option value="metal">Metal</option><option value="gold">Gold</option>
+            <option value="metal">Metal</option>
           </select>
           <label for="flatBallMaterial">Flat ball:</label>
           <select id="flatBallMaterial">
             <option value="matte">Matte</option><option value="plastic">Plastic</option>
-            <option value="metal">Metal</option><option value="gold">Gold</option>
-          </select>
-        </div>
-        <div class="control-row">
-          <label for="lampShading">Lamp shading:</label>
-          <select id="lampShading">
-            <option value="smooth">Smooth</option><option value="flat">Flat</option>
-          </select>
-          <label for="specModel">Highlight:</label>
-          <select id="specModel">
-            <option value="phong">Phong</option><option value="blinn">Blinn-Phong</option>
+            <option value="metal">Metal</option>
           </select>
         </div>
       </div>

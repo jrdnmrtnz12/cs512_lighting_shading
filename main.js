@@ -4,7 +4,7 @@ in vec3 aNormal;
 
 uniform mat4 uModelView;
 uniform mat4 uProjection;
-uniform mat3 uNormalMatrix;   // (M^-1)^T, keeps normals straight when a shape is stretched
+uniform mat3 uNormalMatrix;   // #2: (M^-1)^T, keeps normals straight when a shape is stretched
 
 out vec3 vPosition;
 out vec3 vNormal;
@@ -12,7 +12,7 @@ out vec3 vNormal;
 void main() {
   vec4 p = uModelView * vec4(aPosition, 1.0);
   vPosition = p.xyz;
-  vNormal = normalize(uNormalMatrix * aNormal);
+  vNormal = normalize(uNormalMatrix * aNormal);   // #2: turns the normal with the part, then makes it length 1
   gl_Position = uProjection * p;
 }
 `;
@@ -24,35 +24,28 @@ in vec3 vPosition;
 in vec3 vNormal;
 
 uniform vec3 uColor;
-uniform float uKa, uKd, uKs, uAlpha;   // material: ambient, diffuse, specular, shininess
-uniform float uAmbient;                // how much ambient light reaches this object
-uniform bool uBlinn;                   // true = Blinn-Phong highlight, false = Phong
+uniform float uKa, uKd, uKs, uAlpha;   // #2: the material: ambient, diffuse, specular, shininess
+uniform float uAmbient;                // #3: how bright the ambient light is on this part (Ia)
 
-uniform vec3 uLightPos;   // eye space (room light)
-uniform vec3 uLightColor;
+uniform vec3 uLightPos;   // eye space
+uniform vec3 uLightColor;   // #3: the room light's color times its brightness (Id and Is)
 
-uniform vec3 uSpotPos;    // eye space (lamp light)
-uniform vec3 uSpotDir;
-uniform vec3 uSpotColor;
-uniform float uSpotCutoff;   // cos of the cone's half angle
-uniform float uSpotExp;      // how soft the edge of the cone is
+// #3: the lamp's spotlight, also in eye space
+uniform vec3 uSpotPos;       // #3: where the bulb is
+uniform vec3 uSpotDir;       // #3: which way the spotlight points
+uniform vec3 uSpotColor;     // #3: the spotlight's color times its brightness
+uniform float uSpotCutoff;   // #3: cos of the cone's half angle
+uniform float uSpotExp;      // #3: edge softness, bigger = fades out faster toward the edge
 
 out vec4 fragColor;
 
-// diffuse + specular from one light
+// #2: diffuse + specular from one light: Kd (l . n) + Ks (v . r)^alpha, times the light's color
 vec3 calculateLight(vec3 lightPos, vec3 lightColor, vec3 N, vec3 V) {
-  vec3 L = normalize(lightPos - vPosition);
-  float diff = max(dot(N, L), 0.0);
+  vec3 L = normalize(lightPos - vPosition);   // #2: from this point toward the light
+  vec3 R = reflect(-L, N);                    // #2: the light reflected off the surface
 
-  float spec;
-  if (uBlinn) {
-    vec3 H = normalize(L + V);               // halfway vector
-    spec = pow(max(dot(N, H), 0.0), uAlpha);
-  } else {
-    vec3 R = reflect(-L, N);
-    spec = pow(max(dot(V, R), 0.0), uAlpha);
-  }
-  if (diff == 0.0) spec = 0.0;               // no highlight on the side facing away from the light
+  float diff = max(dot(N, L), 0.0);               // #2: brighter the more the surface faces the light
+  float spec = pow(max(dot(V, R), 0.0), uAlpha);  // #2: shiny spot, strongest when the reflected light points at the camera
 
   return lightColor * (uKd * diff * uColor + uKs * spec * vec3(1.0));
 }
@@ -61,19 +54,25 @@ void main() {
   vec3 N = normalize(vNormal);
   vec3 V = normalize(-vPosition);           // camera sits at the origin
 
-  // ambient is only added once, not per light
+  // #3: ambient is only added once, not per light
   vec3 ambient = uAmbient * uKa * uColor;
 
-  // light 1: the room light
+  // #3: light 1, the room light
   vec3 room = calculateLight(uLightPos, uLightColor, N, V);
 
-  // light 2: the lamp's spotlight, only inside its cone, fading with distance
+  // #3: light 2, the lamp's spotlight. spotCos is cos of the angle between the cone's center line
+  // and this point. outside the cone (past the cutoff) it gets no spotlight at all, and inside it
+  // fades toward the edge with pow(spotCos, uSpotExp)
   float spotCos = dot(normalize(vPosition - uSpotPos), normalize(uSpotDir));
   float spot = spotCos > uSpotCutoff ? pow(spotCos, uSpotExp) : 0.0;
-  float d = length(uSpotPos - vPosition);
-  float atten = 1.0 / (1.0 + 0.09 * d + 0.032 * d * d);
-  vec3 lamp = spot * atten * calculateLight(uSpotPos, uSpotColor, N, V);
 
+  // #3: distance fade (attenuation): f_att = 1 / (a + b d + c d^2) with a = 1, b = 0.09, c = 0.032,
+  // where d is the distance from the bulb to this point. it goes on diffuse and specular, not ambient
+  float d = length(uSpotPos - vPosition);
+  float fatt = 1.0 / (1.0 + 0.09 * d + 0.032 * d * d);
+  vec3 lamp = spot * fatt * calculateLight(uSpotPos, uSpotColor, N, V);
+
+  // #3: I = Ia Ka + room light + spotlight
   fragColor = vec4(ambient + room + lamp, 1.0);
 }
 `;
@@ -113,7 +112,7 @@ fragEditor.value = FRAGMENT_SHADER;
 let program, uModelView, uProjection, uLightPos, uColor;
 
 // #2: the new uniforms for materials, shading and the second light, looked up by name
-const EXTRA_UNIFORMS = ["uNormalMatrix", "uKa", "uKd", "uKs", "uAlpha", "uAmbient", "uBlinn", "uLightColor",
+const EXTRA_UNIFORMS = ["uNormalMatrix", "uKa", "uKd", "uKs", "uAlpha", "uAmbient", "uLightColor",
   "uSpotPos", "uSpotDir", "uSpotColor", "uSpotCutoff", "uSpotExp"];
 const u = {};
 
@@ -127,7 +126,7 @@ function updateProgram() {
     uProjection = gl.getUniformLocation(program, "uProjection");
     uLightPos = gl.getUniformLocation(program, "uLightPos");
     uColor = gl.getUniformLocation(program, "uColor");
-    for (const name of EXTRA_UNIFORMS) u[name] = gl.getUniformLocation(program, name);
+    for (const name of EXTRA_UNIFORMS) u[name] = gl.getUniformLocation(program, name);  // #2: finds each new uniform in the shader
     shaderError.textContent = "";
   } catch (e) {
     shaderError.textContent = e.message.replace(/\0/g, "");  // some drivers end the log with \0
@@ -162,11 +161,8 @@ const coneMesh = createMesh(createCone(32));
 const sphereMesh = createMesh(createSphere(32, 16));
 const torusMesh = createMesh(createTorus(1, 0.12, 32, 12));
 
-// #2: flat-shaded copies of the curved shapes, one normal per triangle
-const flatCylinderMesh = createMesh(makeFlat(createCylinder(16)));
-const flatConeMesh = createMesh(makeFlat(createCone(16)));
+// #2: flat-shaded copy of the ball, one normal per triangle
 const flatSphereMesh = createMesh(makeFlat(createSphere(16, 10)));
-const flatTorusMesh = createMesh(makeFlat(createTorus(1, 0.12, 16, 8)));
 
 gl.enable(gl.DEPTH_TEST);
 gl.clearColor(0, 0, 0, 1);
@@ -219,10 +215,10 @@ const MATERIALS = {
   matte:   { ka: 0.2, kd: 0.8, ks: 0.0, alpha: 1 },     // diffuse only, no highlight at all
   plastic: { ka: 0.2, kd: 0.8, ks: 0.5, alpha: 8 },
   metal:   { ka: 0.2, kd: 0.5, ks: 0.9, alpha: 120 },
-  gold:    { ka: 0.25, kd: 0.8, ks: 1.0, alpha: 100, color: [0.9, 0.65, 0.1] },
   glow:    { ka: 1.0, kd: 0.0, ks: 0.0, alpha: 1 }      // the bulb: ambient only so it looks lit up
 };
 
+// #2: each part also carries a material now (plastic if none is given)
 function createNode(mesh, color, shape, material = MATERIALS.plastic) {
   return { mesh, color, shape, material, joint: null, children: [] };
 }
@@ -277,21 +273,13 @@ rim.joint = translate(0, 0, 0);
 smoothBall.joint = translate(0.3, 0, 0.55);
 flatBall.joint = translate(1.4, 0, -0.35);
 
-// #2: flat versions of the lamp parts, used when Lamp shading is set to Flat
-// (the cube's faces are already flat, so the upper arm keeps its mesh)
-lampBase.flatMesh = flatCylinderMesh;
-lowerArm.flatMesh = flatCylinderMesh;
-upperArm.flatMesh = cubeMesh;
-shade.flatMesh = flatConeMesh;
-rim.flatMesh = flatTorusMesh;
-
 // #4: lamp joint angles in degrees from the new sliders, and the light settings
 const DEG = Math.PI / 180;
-const DEFAULT_JOINTS = { swivel: 0, lower: 20, upper: -15, shade: 40 };   // #4: stays above the desk even at the ends of the sway
+const DEFAULT_JOINTS = { swivel: 0, lower: 20, upper: -15, shade: 73 };   // #4: stays above the desk even at the ends of the sway
 const DEFAULT_LIGHTS = { spotBright: 150, spotWidth: 30, roomBright: 50 };
 let joint = Object.assign({}, DEFAULT_JOINTS);
 let lights = Object.assign({}, DEFAULT_LIGHTS);
-let swayOn = true, spotOn = true, lampFlat = false, blinn = false;
+let swayOn = true, spotOn = true;
 let spotColor = [1, 0.95, 0.8];
 let spotLevel = 1, roomLevel = 1;   // worked out from the settings every frame
 
@@ -323,6 +311,7 @@ function wireSliders(rows, values) {
 wireSliders(jointControls, () => joint);
 wireSliders(lightControls, () => lights);
 
+// #4: Sway turns the original back-and-forth motion on and off, and the other box turns the spotlight on and off
 document.getElementById("swayCheck").addEventListener("change", e => swayOn = e.target.checked);
 document.getElementById("spotCheck").addEventListener("change", e => spotOn = e.target.checked);
 
@@ -339,18 +328,19 @@ const materialControls = [
   ['smoothBallMaterial', 'metal', [smoothBall]],
   ['flatBallMaterial', 'matte', [flatBall]]
 ];
+
+// #4: gives every part in the list whatever preset its dropdown is set to
 function applyMaterial(selectId, nodes) {
   const material = MATERIALS[document.getElementById(selectId).value];
   nodes.forEach(n => n.material = material);
 }
+
+// #4: sets each dropdown to its starting preset, and picking a new one swaps the material on its parts
 materialControls.forEach(([selectId, start, nodes]) => {
   document.getElementById(selectId).value = start;
   applyMaterial(selectId, nodes);
   document.getElementById(selectId).addEventListener("change", () => applyMaterial(selectId, nodes));
 });
-
-document.getElementById("lampShading").addEventListener("change", e => lampFlat = e.target.value === "flat");
-document.getElementById("specModel").addEventListener("change", e => blinn = e.target.value === "blinn");
 
 // #4: puts the new lamp, light and material controls back to how they started
 function resetAll() {
@@ -364,11 +354,9 @@ function resetAll() {
     document.getElementById(sliderId).value = lights[key];
     document.getElementById(outId).textContent = lights[key] + unit;
   });
-  swayOn = true; spotOn = true; lampFlat = false; blinn = false;
+  swayOn = true; spotOn = true;
   document.getElementById("swayCheck").checked = true;
   document.getElementById("spotCheck").checked = true;
-  document.getElementById("lampShading").value = "smooth";
-  document.getElementById("specModel").value = "phong";
   document.getElementById("spotColor").value = "#fff2cc";
   spotColor = hexToRgb("#fff2cc");
   materialControls.forEach(([selectId, start, nodes]) => {
@@ -381,22 +369,22 @@ document.getElementById("resetBtn").addEventListener("click", resetAll);
 function drawNode(node, frame) {
   const modelView = multiply(frame, node.shape);
   gl.uniformMatrix4fv(uModelView, false, modelView);
-  // #2: the normal matrix for this part, so stretched shapes still get normals that stick straight out
+  // #2: the normal matrix for this part, so the lighting is still right on stretched shapes
   gl.uniformMatrix3fv(u.uNormalMatrix, false, normalMatrix(modelView));
 
-  // #2: this part's material. a preset with its own color (gold) overrides the part's color
+  // #2: this part's color and material
   const m = node.material;
-  gl.uniform3fv(uColor, m.color || node.color);
+  gl.uniform3fv(uColor, node.color);
   gl.uniform1f(u.uKa, m.ka);
   gl.uniform1f(u.uKd, m.kd);
   gl.uniform1f(u.uKs, m.ks);
   gl.uniform1f(u.uAlpha, m.alpha);
+  // #3: the bulb's ambient follows the spotlight's brightness (and stays a little lit when it's off),
+  // everything else gets the room light's ambient
   gl.uniform1f(u.uAmbient, node.glows ? Math.max(spotLevel, 0.15) : roomLevel);
 
-  // #2: lamp parts switch to their flat mesh when Lamp shading is set to Flat
-  const mesh = (lampFlat && node.flatMesh) ? node.flatMesh : node.mesh;
-  gl.bindVertexArray(mesh.vao);
-  gl.drawElements(gl.TRIANGLES, mesh.count, gl.UNSIGNED_SHORT, 0);
+  gl.bindVertexArray(node.mesh.vao);
+  gl.drawElements(gl.TRIANGLES, node.mesh.count, gl.UNSIGNED_SHORT, 0);
 }
 
 //Data structure
@@ -432,31 +420,36 @@ function render(time) {
 
   // #4: lamp joints from the sliders. with Sway on, the original back-and-forth motion gets added on top
   const sway = swayOn ? 1 : 0;
+  // #4: the base sits on the left side of the desk and swivels about y
   lampBase.joint = multiply(translate(-1.2, 0, 0), rotateY(joint.swivel * DEG));
 
-  // Lower arm
+  // Lower arm (root)
+  // #1: the desk is the root now, so the lower arm starts 0.2 up from the lamp base (the base's top)
   lowerArm.joint = multiply(translate(0, 0.2, 0), rotateZ(joint.lower * DEG + sway * 0.5 * Math.sin(t)));
 
   // Upper arm (child)
   upperArm.joint = multiply(translate(0, 1.2, 0), rotateZ(joint.upper * DEG + sway * Math.sin(1.5 * t)));
 
+  // #4: the shade sits at the top of the upper arm (1.0 up) and tilts about z
   shade.joint = multiply(translate(0, 1.0, 0), rotateZ(joint.shade * DEG));
 
-  // #3: light brightness from the sliders and checkbox
+  // #3: light brightness from the sliders and checkbox. 100% = a light color of 1
   spotLevel = spotOn ? lights.spotBright / 100 : 0;
   roomLevel = lights.roomBright / 100;
   gl.uniform3fv(u.uLightColor, [roomLevel, roomLevel, roomLevel]);
   gl.uniform3fv(u.uSpotColor, spotColor.map(c => c * spotLevel));
+  // #3: the width slider is the cone's half angle, and the cutoff is cos of that angle
   gl.uniform1f(u.uSpotCutoff, Math.cos(lights.spotWidth * DEG));
-  gl.uniform1f(u.uSpotExp, 10);
-  gl.uniform1i(u.uBlinn, blinn ? 1 : 0);
+  gl.uniform1f(u.uSpotExp, 20);   // #3: edge softness
 
-  // #5: the spotlight rides on the lamp. multiplying the same chain of joints the tree uses gives the
-  // shade's matrix, then the bulb's spot is a point (w = 1) and "straight down out of the shade" is a
-  // direction (w = 0), so moving any joint aims the light
+  // #5: the spotlight moves with the lamp. this gets the shade's matrix by multiplying the joints
+  // from the desk down to the shade: M_shade = view * M_desk * M_base * M_lower * M_upper * M_shade
   let shadeFrame = view;
   for (const n of [desk, lampBase, lowerArm, upperArm, shade]) shadeFrame = multiply(shadeFrame, n.joint);
+  // #5: the light's position is the bulb's spot in the shade (0, -0.6, 0). it's a point (w = 1),
+  // so it gets moved and turned with the shade
   gl.uniform3fv(u.uSpotPos, transformPoint(shadeFrame, [0, -0.6, 0]));
+  // #5: the light points down the shade's -y. it's a direction (w = 0), so it only gets turned
   gl.uniform3fv(u.uSpotDir, transformDirection(shadeFrame, [0, -1, 0]));
 
   drawTree(desk, view);

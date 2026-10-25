@@ -86,9 +86,8 @@ function createCone(segments) {
   return { positions: new Float32Array(pos), normals: new Float32Array(nrm), indices: new Uint16Array(idx) };
 }
 
-// #1: ball of radius 1, built by walking around it in a grid of latitude/longitude steps and
-// placing a point at each step. on a ball of radius 1 each point already points straight out
-// from the center, so the point doubles as its own normal
+// #1: ball of radius 1. v goes from the top to the bottom and u goes around, and there's a point at
+// each step. on a ball of radius 1 the point is also its normal, since it points out from the center
 function createSphere(uSteps, vSteps) {
   const pos = [], nrm = [], idx = [];
 
@@ -147,9 +146,9 @@ function createTorus(R, r, uSteps, vSteps) {
 }
 
 // #2: flat shading. every triangle gets its own 3 corners and one normal from the cross product of
-// two of its edges, n = (p1 - p0) x (p2 - p0), so the whole triangle comes out one shade.
-// triangles squeezed into a line (at a ball's poles) get skipped, and a normal that ends up
-// pointing into the shape gets flipped so it points out like the smooth normals do
+// two of its edges, n = (p1 - p0) x (p2 - p0), so the whole triangle is one shade.
+// triangles with no area (at the ball's top and bottom) get skipped, and if a normal points into
+// the shape it gets flipped so it points out like the smooth normals
 function makeFlat({ positions, normals, indices }) {
   const pos = [], nrm = [], idx = [];
   const corner = (list, k) => [list[k * 3], list[k * 3 + 1], list[k * 3 + 2]];
